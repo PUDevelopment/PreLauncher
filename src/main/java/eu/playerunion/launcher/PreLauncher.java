@@ -9,9 +9,9 @@ public class PreLauncher {
 	public static void main(String[] args) {
 		System.out.println("[ DEBUG ] PreLauncher inicializálása...\n");
 		
-		String javaVersion = System.getProperty("sun.arch.data.model");
+		String javaVendor = System.getProperty("sun.arch.data.model");
     	
-    	if(javaVersion.equals("32")) {
+    	if(javaVendor.equals("32")) {
     		System.out.println("[ DEBUG ] Nem megfelelő (32 bites) Java detektálva, a PreLauncher bezárja önmagát...");
     		
     		JOptionPane.showMessageDialog(null, "A kliens futtatásához 64 bites Java szükséges!\nTöltsd le a Java 8-as (64 bit) verzióját a https://www.java.com oldalról!", "Java verzió nem megfelelő", JOptionPane.WARNING_MESSAGE);
