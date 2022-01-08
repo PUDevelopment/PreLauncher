@@ -40,45 +40,6 @@ public class FileUtil {
 		return "";
 	}
 	
-	public static void donwloadLauncher(String url, String path) throws Exception {
-		System.out.println("[ DEBUG ] A rendszer megkísérli a kliens letöltését...");
-		
-		OkHttpClient httpClient = new OkHttpClient();
-		Request request = new Request.Builder()
-				.url(url)
-				.get()
-				.build();
-		
-		try(Response response = httpClient.newCall(request).execute()) {
-			FileOutputStream fos = new FileOutputStream(path);
-			byte[] bytes = response.body().bytes();
-			String originalFile = DigestUtils.md5Hex(bytes);
-			
-			fos.write(bytes);
-			
-			File file = new File(path);
-			String downloadedFile = DigestUtils.md5Hex(new FileInputStream(file));
-			
-			System.out.println("[ DEBUG ] Fájl sikeresen letöltve!");
-			System.out.println("[ DEBUG ] Fájl ellenőrzése...");
-			System.out.println("[ DEBUG ] Checksum: " + originalFile + " => " + downloadedFile);
-			
-			if(!originalFile.equals(downloadedFile)) {
-				System.out.println("[ DEBUG ] A fájl sérült, vagy módosult! Újrapróbálkozás...");
-				
-				donwloadLauncher(url, path); // Launcher letöltésének megkísérlése újból
-				
-				return;
-			}
-			
-			System.out.println("[ DEBUG ] A fájl ellenőrzése sikeres volt, a fájl rendben van!");
-		} catch(Exception e) {
-			e.printStackTrace();
-		}
-		
-		
-	}
-	
 	public static OS getPlatform() {
 		String osName = System.getProperty("os.name").toLowerCase();
 		

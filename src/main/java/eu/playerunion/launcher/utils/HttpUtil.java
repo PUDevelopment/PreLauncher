@@ -12,26 +12,6 @@ import okhttp3.Response;
 
 public class HttpUtil {
 	
-	public static @NonNull String executePost(String url, String post) {
-		OkHttpClient httpClient = new OkHttpClient();
-		RequestBody body = RequestBody.create(MediaType.get("application/json; charset=utf-8"), post);
-		
-		Request request = new Request.Builder()
-				.url(url)
-				.post(body)
-				.build();
-		
-		try (Response response = httpClient.newCall(request).execute()) {
-			String resp = response.body().string();
-			
-			return resp;
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		
-		return "";
-	}
-	
 	public static @NonNull String executeGet(String url, String get) {
 		OkHttpClient httpClient = new OkHttpClient();
 		Request request = new Request.Builder()

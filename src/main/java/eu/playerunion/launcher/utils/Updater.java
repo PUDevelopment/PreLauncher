@@ -2,11 +2,14 @@ package eu.playerunion.launcher.utils;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.HashMap;
+
+import javax.swing.JOptionPane;
 
 import org.apache.commons.codec.digest.DigestUtils;
 
@@ -14,11 +17,17 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+
 public class Updater {
 	
 	private Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	private File updateInfo = new File(FileUtil.getWorkingDirectory(), "updateInfo.json");
 	private String repository = "https://jenkins.playerunion.eu/job/ferrum/lastStableBuild/";
+	
+	private int attempts = 0;
 	
 	public void checkForRelease() {
 		if(!this.checkMcFolder() || !this.updateInfo.exists())
@@ -68,7 +77,7 @@ public class Updater {
 			if(!info.getChecksum().equals(downloadedFile) || !file.exists()) {
 				System.out.println("[ DEBUG ] A fájl frissült, vagy módosították, ezért a launcher újra letölti azt.");
 				
-				this.doSetup();
+				this.donwloadLauncher(this.repository + "/artifact/" + artifactPath, FileUtil.getWorkingDirectory().toString() + File.separator + artifactId);
 				
 				return;
 			}
@@ -79,7 +88,19 @@ public class Updater {
 		} catch (Exception e) {
 			e.printStackTrace();
 			
-			this.doSetup();
+			this.attempts++;
+			
+			if(this.attempts == 5) {
+				JOptionPane.showConfirmDialog(null, "Nem sikerült a launcher telepítése és ellenőrzése!\n"
+						+ "Kérlek, próbáld meg később, vagy vedd fel velünk a kapcsolatot!\n"
+						+ "Discord: https://dc.playerunion.eu\n"
+						+ "Email: admin@playerunion.eu", "Sikertelen telepítés", JOptionPane.CLOSED_OPTION);
+				
+				System.gc();
+				System.exit(0);
+			}
+			
+			this.doSetup(); // Próbálja meg telepíteni a biztonság kedvéért. Legfeljebb 5x próbálkozik, majd kibreakel.
 			
 			this.checkForRelease();
 		}
@@ -103,7 +124,7 @@ public class Updater {
 		System.out.println("[ DEBUG ] Checksum: " + checksum);
 		
 		try {
-			FileUtil.donwloadLauncher(this.repository + "/artifact/" + artifactPath, FileUtil.getWorkingDirectory().toString() + File.separator + artifactId);
+			this.donwloadLauncher(this.repository + "/artifact/" + artifactPath, FileUtil.getWorkingDirectory().toString() + File.separator + artifactId);
 			
 			UpdateInfo info = new UpdateInfo(artifactId, date.toLocaleString(), checksum);
 			FileWriter fw = new FileWriter(this.updateInfo);
@@ -113,6 +134,59 @@ public class Updater {
 			fw.close();
 		} catch(Exception e) {
 			e.printStackTrace();
+			
+			JOptionPane.showConfirmDialog(null, "Nem sikerült a launcher telepítése és ellenőrzése!\n"
+					+ "Kérlek, próbáld meg később, vagy vedd fel velünk a kapcsolatot!\n"
+					+ "Discord: https://dc.playerunion.eu\n"
+					+ "Email: admin@playerunion.eu", "Sikertelen telepítés", JOptionPane.CLOSED_OPTION);
+			
+			System.gc();
+			System.exit(0);
+		}
+	}
+	
+	public void donwloadLauncher(String url, String path) throws Exception {
+		System.out.println("[ DEBUG ] A rendszer megkísérli a kliens letöltését...");
+		
+		OkHttpClient httpClient = new OkHttpClient();
+		Request request = new Request.Builder()
+				.url(url)
+				.get()
+				.build();
+		
+		try(Response response = httpClient.newCall(request).execute()) {
+			FileOutputStream fos = new FileOutputStream(path);
+			byte[] bytes = response.body().bytes();
+			String originalFile = DigestUtils.md5Hex(bytes);
+			
+			fos.write(bytes);
+			
+			File file = new File(path);
+			String downloadedFile = DigestUtils.md5Hex(new FileInputStream(file));
+			
+			System.out.println("[ DEBUG ] Fájl sikeresen letöltve!");
+			System.out.println("[ DEBUG ] Fájl ellenőrzése...");
+			System.out.println("[ DEBUG ] Checksum: " + originalFile + " => " + downloadedFile);
+			
+			if(!originalFile.equals(downloadedFile)) {
+				System.out.println("[ DEBUG ] A fájl sérült, vagy módosult! Újrapróbálkozás...");
+				
+				donwloadLauncher(url, path); // Launcher letöltésének megkísérlése újból
+				
+				return;
+			}
+			
+			System.out.println("[ DEBUG ] A fájl ellenőrzése sikeres volt, a fájl rendben van!");
+		} catch(Exception e) {
+			e.printStackTrace();
+			
+			JOptionPane.showConfirmDialog(null, "Nem sikerült a launcher telepítése és ellenőrzése!\n"
+					+ "Kérlek, próbáld meg később, vagy vedd fel velünk a kapcsolatot!\n"
+					+ "Discord: https://dc.playerunion.eu\n"
+					+ "Email: admin@playerunion.eu", "Sikertelen telepítés", JOptionPane.CLOSED_OPTION);
+			
+			System.gc();
+			System.exit(0);
 		}
 	}
 
