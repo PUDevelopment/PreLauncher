@@ -1,6 +1,7 @@
 package eu.playerunion.launcher.utils;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.MalformedURLException;
@@ -12,16 +13,26 @@ import org.apache.commons.codec.digest.DigestUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+
 public class FileUtil {
 	
 	private static File workDir;
 	private static Gson gson = new GsonBuilder().create();
 	
 	public static String generateChecksum(String url) {
-		try {
-			return new String(DigestUtils.md5Hex(new URL(url).openStream()));
-		} catch (MalformedURLException e) {
-			e.printStackTrace();
+		OkHttpClient httpClient = new OkHttpClient();
+		Request request = new Request.Builder()
+				.url(url)
+				.get()
+				.build();
+		
+		try (Response response = httpClient.newCall(request).execute()) {
+			return DigestUtils.md5Hex(response.body().bytes());
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -32,33 +43,40 @@ public class FileUtil {
 	public static void donwloadLauncher(String url, String path) throws Exception {
 		System.out.println("[ DEBUG ] A rendszer megkísérli a kliens letöltését...");
 		
-		HashMap<String, String> request = new HashMap<>();
+		OkHttpClient httpClient = new OkHttpClient();
+		Request request = new Request.Builder()
+				.url(url)
+				.get()
+				.build();
 		
-		request.put("artifact", "launcher");
-		
-		String apiResponse = HttpUtil.executePost(url, gson.toJson(request));
-		
-		FileOutputStream fos = new FileOutputStream(path);
-		byte[] bytes = apiResponse.getBytes();
-		String originalFile = DigestUtils.md5Hex(bytes);
-		
-		fos.write(bytes);
-		
-		String downloadedFile = DigestUtils.md5Hex(new File(path).toURL().openStream());
-		
-		System.out.println("[ DEBUG ] Fájl sikeresen letöltve!");
-		System.out.println("[ DEBUG ] Fájl ellenőrzése...");
-		System.out.println("[ DEBUG ] Checksum: " + originalFile + " => " + downloadedFile);
-		
-		if(!originalFile.equals(downloadedFile)) {
-			System.out.println("[ DEBUG ] A fájl sérült, vagy módosult! Újrapróbálkozás...");
+		try(Response response = httpClient.newCall(request).execute()) {
+			FileOutputStream fos = new FileOutputStream(path);
+			byte[] bytes = response.body().bytes();
+			String originalFile = DigestUtils.md5Hex(bytes);
 			
-			donwloadLauncher(url, path); // Launcher letöltésének megkísérlése újból
+			fos.write(bytes);
 			
-			return;
+			File file = new File(path);
+			String downloadedFile = DigestUtils.md5Hex(new FileInputStream(file));
+			
+			System.out.println("[ DEBUG ] Fájl sikeresen letöltve!");
+			System.out.println("[ DEBUG ] Fájl ellenőrzése...");
+			System.out.println("[ DEBUG ] Checksum: " + originalFile + " => " + downloadedFile);
+			
+			if(!originalFile.equals(downloadedFile)) {
+				System.out.println("[ DEBUG ] A fájl sérült, vagy módosult! Újrapróbálkozás...");
+				
+				donwloadLauncher(url, path); // Launcher letöltésének megkísérlése újból
+				
+				return;
+			}
+			
+			System.out.println("[ DEBUG ] A fájl ellenőrzése sikeres volt, a fájl rendben van!");
+		} catch(Exception e) {
+			e.printStackTrace();
 		}
 		
-		System.out.println("[ DEBUG ] A fájl ellenőrzése sikeres volt, a fájl rendben van!");
+		
 	}
 	
 	public static OS getPlatform() {

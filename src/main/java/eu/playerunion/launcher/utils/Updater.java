@@ -1,6 +1,7 @@
 package eu.playerunion.launcher.utils;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.net.MalformedURLException;
 import java.sql.Date;
@@ -12,13 +13,12 @@ import org.apache.commons.codec.digest.DigestUtils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
 public class Updater {
 	
 	private Gson gson = new GsonBuilder().setPrettyPrinting().create();
 	private File updateInfo = new File(FileUtil.getWorkingDirectory(), "updateInfo.json");
-	private String repository = "https://files.playerunion.eu/";
+	private String repository = "https://jenkins.playerunion.eu/job/ferrum/lastStableBuild/";
 	
 	public void checkForRelease() {
 		if(!this.checkMcFolder() || !this.updateInfo.exists())
@@ -35,18 +35,21 @@ public class Updater {
 	}
 	
 	private void checkLauncher() {
-		System.out.println("[ DEBUG ] Legfrissebb build keresése...");
+		System.out.println("[ DEBUG ] Legfrissebb stabil build keresése...");
 		
-		HashMap<String, String> request = new HashMap<>();
-		
-		request.put("checksum", "launcher");
-		
-		String apiResponse = HttpUtil.executePost(this.repository, this.gson.toJson(request));
+		String apiResponse = HttpUtil.executeGet(this.repository + "api/json", null);
 		JsonObject resp = this.gson.fromJson(apiResponse, JsonObject.class);
+		String artifactId = resp.get("artifacts").getAsJsonArray().get(0).getAsJsonObject().get("fileName").getAsString();
+		String artifactPath = resp.get("artifacts").getAsJsonArray().get(0).getAsJsonObject().get("relativePath").getAsString();
+		String buildNumber = resp.get("id").getAsString();
+		String checksum = FileUtil.generateChecksum(this.repository + "artifact/" + artifactPath);
+		Timestamp stamp = new Timestamp(Long.parseLong(resp.get("timestamp").getAsString()));
+		Date date = new Date(stamp.getTime());
 		
-		UpdateInfo info = new UpdateInfo(resp.get("artifactId").getAsString(), resp.get("releaseDate").getAsString(), resp.get("checksum").getAsString());
+		System.out.println("[ DEBUG ] Talált utolsó sikeres build: #" + buildNumber + " (" + date.toLocaleString() + ")");
+		System.out.println("[ DEBUG ] Checksum: " + checksum);
 		
-		System.out.println("[ DEBUG ] Talált build: " + resp.get("releaseDate").getAsString());
+		UpdateInfo info = new UpdateInfo(artifactId, date.toLocaleString(), checksum);
 		
 		try {
 			FileWriter fw = new FileWriter(this.updateInfo);
@@ -58,56 +61,51 @@ public class Updater {
 			e.printStackTrace();
 		}
 		
-		String downloadedFile = null;
-		
 		try {
-			File file = new File(FileUtil.getWorkingDirectory().toString() + File.separator + resp.get("artifactId").getAsString());
+			File file = new File(FileUtil.getWorkingDirectory().toString() + File.separator + artifactId);
+			String downloadedFile = DigestUtils.md5Hex(new FileInputStream(file));
 			
-			if(!file.exists()) {
+			if(!info.getChecksum().equals(downloadedFile) || !file.exists()) {
+				System.out.println("[ DEBUG ] A fájl frissült, vagy módosították, ezért a launcher újra letölti azt.");
+				
 				this.doSetup();
 				
 				return;
 			}
 			
-			String f = file.toURL().toString();
+			System.out.println("[ DEBUG ] A fájl egyezik, módosítás nem történt.");
 			
-			downloadedFile = FileUtil.generateChecksum(f);
-		} catch (MalformedURLException e) {
+			// Launcher elindítása
+		} catch (Exception e) {
 			e.printStackTrace();
-		}
-		
-		if(!info.getChecksum().equals(downloadedFile)) {
-			System.out.println("[ DEBUG ] A fájl frissült, vagy módosították, ezért a launcher újra letölti azt.");
 			
 			this.doSetup();
 			
-			return;
+			this.checkForRelease();
 		}
-		
-		System.out.println("[ DEBUG ] A fájl egyezik, módosítás nem történt.");
-		
-		// LAUNCH
 	}
 	
 	private void doSetup() {
 		FileUtil.getWorkingDirectory().mkdir();
 		
-		System.out.println("[ DEBUG ] Legfrissebb build keresése...");
+		System.out.println("[ DEBUG ] Legfrissebb stabil build keresése...");
 		
-		HashMap<String, String> request = new HashMap<>();
-		
-		request.put("checksum", "launcher");
-		
-		String apiResponse = HttpUtil.executePost(this.repository, this.gson.toJson(request));
+		String apiResponse = HttpUtil.executeGet(this.repository + "api/json", null);
 		JsonObject resp = this.gson.fromJson(apiResponse, JsonObject.class);
+		String artifactId = resp.get("artifacts").getAsJsonArray().get(0).getAsJsonObject().get("fileName").getAsString();
+		String artifactPath = resp.get("artifacts").getAsJsonArray().get(0).getAsJsonObject().get("relativePath").getAsString();
+		String buildNumber = resp.get("id").getAsString();
+		String checksum = FileUtil.generateChecksum(this.repository + "artifact/" + artifactPath);
+		Timestamp stamp = new Timestamp(Long.parseLong(resp.get("timestamp").getAsString()));
+		Date date = new Date(stamp.getTime());
 		
-		System.out.println("[ DEBUG ] Checksum: " + resp.get("checksum").getAsString());
-		System.out.println("[ DEBUG ] Talált build: " + resp.get("releaseDate").getAsString());
+		System.out.println("[ DEBUG ] Talált utolsó sikeres build: #" + buildNumber + " (" + date.toLocaleString() + ")");
+		System.out.println("[ DEBUG ] Checksum: " + checksum);
 		
 		try {
-			FileUtil.donwloadLauncher(this.repository, FileUtil.getWorkingDirectory().toString() + File.separator + resp.get("artifactId").getAsString());
+			FileUtil.donwloadLauncher(this.repository + "/artifact/" + artifactPath, FileUtil.getWorkingDirectory().toString() + File.separator + artifactId);
 			
-			UpdateInfo info = new UpdateInfo(resp.get("artifactId").getAsString(), resp.get("releaseDate").getAsString(), resp.get("checksum").getAsString());
+			UpdateInfo info = new UpdateInfo(artifactId, date.toLocaleString(), checksum);
 			FileWriter fw = new FileWriter(this.updateInfo);
 			
 			fw.write(this.gson.toJson(info));
